@@ -203,7 +203,26 @@ solve the image CAPTCHA, poll for the email verification code, submit it, fill t
 twice, create the account, export cookies, and append the account to `accounts.json`.
 
 **With `TWOCAPTCHA_KEY` set, no human interaction is required.** Measured end to end:
-**~116 s per account, zero human steps.**
+**~96–116 s per account, zero human steps.**
+
+Headless is supported and slightly faster (`GS_HEADLESS=1`); the default is headed so
+the window stays visible and a run can be watched:
+
+```bash
+GS_HEADLESS=1 python signup_e2e.py --email you@example.com --seq 1
+```
+
+### Email domain matters
+
+Signup **validates the email domain only at the final `Create` step** — a code that
+arrives in the inbox does not mean the domain is acceptable. A rejected domain fails
+with `Email domain not allowed` and the page never leaves the OAuth hop.
+
+| Domain | Result |
+|---|---|
+| `@outlook.com` | works (real mailbox, unlimited `+` aliases) |
+| `.com`, `.dev` | works |
+| `.xyz`, disposable-mailbox TLDs | **rejected** (`Email domain not allowed`) |
 
 Without a solver key the driver still exposes a manual path: capture the image with
 `capimg`, write the answer to a file, and continue.

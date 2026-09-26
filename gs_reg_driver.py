@@ -13,6 +13,9 @@ OUT     = os.environ.get("GS_OUT", os.path.join(os.path.dirname(os.path.abspath(
 LOG     = os.environ.get("GS_LOG", os.path.join(os.path.dirname(os.path.abspath(__file__)), "gs_reg.log"))
 EMAIL   = os.environ.get("GS_EMAIL", "")
 IP_PROXY = os.environ.get("GS_PROXY", "") or None   # 出口代理，留空=直连
+# Headless mode (GS_HEADLESS=1). Default is headed so the window stays visible
+# and the run can be watched; headless is ~15% faster and needs no display.
+HEADLESS = os.environ.get("GS_HEADLESS", "0") == "1"
 
 os.makedirs(OUT, exist_ok=True)
 
@@ -507,7 +510,16 @@ HANDLERS = {
     "sendcode":   lambda p, a: (click_text(p, r"Send verification code|发送验证码", timeout=8, label="sendcode"),
                                 time.sleep(7), dump(p, "after_sendcode")),
     "create":     lambda p, a: (click_text(p, r"^Create$|^创建$", timeout=8, label="create", exact=True),
-                                time.sleep(10), dump(p, "after_create")),
+                                # Create redirects through /api/auth?code=... (OAuth hop)
+                                # before landing on the home page. A fixed sleep(10) can
+                                # dump mid-hop, so callers see a non-home URL and quit too
+                                # early -- the session cookies (c1/c2) then never land and
+                                # the exported cookie is unauthenticated. Poll until the
+                                # real home page is reached (max 60s), then dump.
+                                wait_until(p, lambda pg: re.match(
+                                    r"https://www\.genspark\.ai/(\?|$)", pg.url or ""),
+                                    timeout=60, poll=1.0),
+                                time.sleep(3), dump(p, "after_create")),
     "extract":    lambda p, a: act_extract(p),
     "type":       lambda p, a: (page_type_any(p, a), dump(p, "manual_type")),
 }
@@ -639,7 +651,7 @@ def main():
     log(f"===== START v4 step={step} =====")
     log(f"[password] {PASSWORD}")
     browser = cloakbrowser.launch_persistent_context(
-        user_data_dir=PROFILE, headless=False, stealth_args=True,
+        user_data_dir=PROFILE, headless=HEADLESS, stealth_args=True,
         proxy=IP_PROXY,   # 每号独立 IP（IP 池槽位），None=不走代理
         viewport={"width": 1440, "height": 900})
     BROWSER = browser

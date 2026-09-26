@@ -154,7 +154,13 @@ wait_log(r"fill:#reenterPassword\] ok", timeout=180, label="password filled")
 time.sleep(3)
 log("clicking Create")
 cmd("create")
-ok = wait_log(r"state:after_create\] url=https://www\.genspark\.ai/",
+# Anchor on the home page itself. A loose pattern also matches the OAuth hop
+# URL (/api/auth?code=...) which the browser passes through before landing,
+# so a mid-hop match would be read as success and the caller would quit before
+# the session cookies are written. Note the trailing \s rather than $: these
+# patterns run against a multi-line log tail without re.MULTILINE, where $
+# only matches the very end of the whole string.
+ok = wait_log(r"state:after_create\] url=https://www\.genspark\.ai/\s",
               timeout=120, label="account created")
 
 log("=" * 70)
@@ -163,6 +169,12 @@ log("=" * 70)
 if not ok:
     print(tail(25))
     sys.exit(1)
+
+# Landing on the home page means the form was accepted, but the browser still
+# needs a moment to persist the session cookies. Exporting immediately can
+# yield an unauthenticated cookie jar (no c1/c2, 401 on first use).
+log("waiting for the session to settle before exporting...")
+time.sleep(25)
 
 # ------------------------------------------- 5. export cookies + add to pool
 log("stopping the driver to release the profile lock...")
